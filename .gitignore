@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build outputs
+dist/
+build/
+
+# Temp files
+temp_palette.png
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# FFmpeg binaries (user should add their own)
+ffmpeg/*.exe
+ffmpeg/*.dll
+
+# Runtime files
+*.pid
+*.seed
+*.pid.lock

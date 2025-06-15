@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF Converter</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>GIF Converter</h1>
+            <div class="file-controls">
+                <button id="selectFileBtn" class="btn primary">Select Video</button>
+                <button id="selectMultipleBtn" class="btn secondary">Select Multiple</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Video Preview Area -->
+            <div class="preview-section">
+                <div class="drop-zone" id="dropZone">
+                    <div class="drop-content">
+                        <h3>Drop video files here</h3>
+                        <p>or click "Select Video" above</p>
+                        <div class="supported-formats">
+                            Supports: MP4, MOV (H.264)
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="video-preview-container" id="videoContainer" style="display: none;">
+                    <video id="videoPreview" controls preload="metadata"></video>
+                    <canvas id="cropOverlay"></canvas>
+                    <div class="crop-controls">
+                        <div class="crop-info">
+                            <span id="cropInfo">No crop selected</span>
+                            <button id="clearCropBtn" class="btn small">Clear Crop</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Panel -->
+            <div class="settings-panel">
+                <h3>Conversion Settings</h3>
+                
+                <!-- Size Settings -->
+                <div class="settings-group">
+                    <h4>Size & Dimensions</h4>
+                    <div class="setting-row">
+                        <label for="outputWidth">Width (px):</label>
+                        <input type="number" id="outputWidth" min="50" max="1920" value="250">
+                    </div>
+                    <div class="setting-row">
+                        <label for="outputHeight">Height (px):</label>
+                        <input type="number" id="outputHeight" min="50" max="1080" value="80">
+                    </div>
+                    <div class="setting-row">
+                        <label>
+                            <input type="checkbox" id="maintainAspect" checked>
+                            Maintain aspect ratio
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Quality Settings -->
+                <div class="settings-group">
+                    <h4>Quality & Compression</h4>
+                    <div class="setting-row">
+                        <label for="fpsSlider">Frame Rate: <span id="fpsValue">15</span> fps</label>
+                        <input type="range" id="fpsSlider" min="5" max="30" value="15">
+                    </div>
+                    <div class="setting-row">
+                        <label for="colorsSlider">Colors: <span id="colorsValue">256</span></label>
+                        <input type="range" id="colorsSlider" min="32" max="256" value="256">
+                    </div>
+                    <div class="setting-row">
+                        <label for="ditherSelect">Dither Method:</label>
+                        <select id="ditherSelect">
+                            <option value="bayer:bayer_scale=5">Bayer (Balanced)</option>
+                            <option value="floyd_steinberg">Floyd-Steinberg (Smooth)</option>
+                            <option value="sierra2_4a">Sierra (Sharp)</option>
+                            <option value="none">None (Fastest)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- File Size Constraints -->
+                <div class="settings-group">
+                    <h4>Size Constraints</h4>
+                    <div class="setting-row">
+                        <label for="maxSizeSlider">Max Size: <span id="maxSizeValue">2.0</span> MB</label>
+                        <input type="range" id="maxSizeSlider" min="0.5" max="10" step="0.1" value="2.0">
+                    </div>
+                    <div class="constraint-info">
+                        <div>Max Width: 250px</div>
+                        <div>Max Height: 80px</div>
+                    </div>
+                </div>
+
+                <!-- Preview Info -->
+                <div class="preview-info">
+                    <h4>Output Preview</h4>
+                    <div class="info-row">
+                        <span>Estimated Size:</span>
+                        <span id="estimatedSize">- MB</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Output Dimensions:</span>
+                        <span id="outputDimensions">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span>Duration:</span>
+                        <span id="videoDuration">-</span>
+                    </div>
+                </div>
+
+                <!-- Convert Button -->
+                <div class="convert-section">
+                    <button id="convertBtn" class="btn convert" disabled>Convert to GIF</button>
+                    <div class="progress-container" id="progressContainer" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="progress-text" id="progressText">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Batch Processing -->
+        <div class="batch-section" id="batchSection" style="display: none;">
+            <h3>Batch Processing</h3>
+            <div class="batch-list" id="batchList">
+                <!-- Batch items will be populated here -->
+            </div>
+            <div class="batch-controls">
+                <button id="processBatchBtn" class="btn primary">Process All</button>
+                <button id="clearBatchBtn" class="btn secondary">Clear List</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

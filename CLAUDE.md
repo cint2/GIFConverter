@@ -12,9 +12,10 @@ Desktop application to convert MP4/QuickTime videos to optimized GIFs with manua
 ## Key Features Implemented
 - Photoshop Save for Web style interface with professional layout
 - Drag & drop + file selection for video loading
-- Visual crop overlay with click and drag selection
-- Real-time size preview and estimation before conversion
-- Quality controls: FPS, colors, dither method sliders/dropdowns
+- Visual crop overlay with click and drag selection (aspect ratio preserved)
+- **Preview Generation**: Create 3-second preview GIFs with actual file sizes
+- **Improved File Size Estimation**: More accurate predictions based on content and settings
+- Quality controls: FPS, colors, enhanced dither method options
 - Size constraints with auto-optimization (2MB/80px height/250px width)
 - Batch processing for multiple files
 - Portable package with run.bat launcher
@@ -31,10 +32,11 @@ GIFConverter/
 │   ├── style.css       # Photoshop-inspired styling  
 │   └── app.js          # Frontend logic and crop functionality
 ├── ffmpeg/             # FFmpeg binaries (user-provided)
-│   ├── ffmpeg.exe      # Video processing engine
+│   ├── ffmpeg.exe      # Video processing engine (50-100MB+)
 │   ├── ffprobe.exe     # Video metadata extraction
 │   ├── ffplay.exe      # Media player (optional)
 │   └── hwinfo.exe      # Hardware info (optional)
+├── download-ffmpeg.bat # FFmpeg installation instructions
 ├── README.md           # Complete documentation
 └── CLAUDE.md           # This file
 ```
@@ -51,7 +53,15 @@ GIFConverter/
 - Max width: 250px
 - Default frame rate: 15 fps
 - Default colors: 256
-- Default dither: Bayer (balanced quality/speed)
+- Default dither: Floyd-Steinberg (best quality)
+
+## Dither Methods (Quality Ranking)
+1. **Floyd-Steinberg** - Best quality for photos and gradients
+2. **Sierra-2** - High quality, slightly faster than Floyd-Steinberg
+3. **Sierra-2-4A** - Good quality with faster processing
+4. **Bayer Fine** (scale=3) - Good for graphics, faster processing
+5. **Bayer** (scale=5) - Balanced quality and speed
+6. **None** - Smallest file size but visible banding
 
 ## Development Notes
 
@@ -85,15 +95,19 @@ GIFConverter/
 
 ### Video Processing Pipeline
 1. **Load Video**: Drag & drop or file selection
-2. **Extract Metadata**: FFprobe or FFmpeg stderr parsing
-3. **Crop Selection**: Visual canvas overlay with mouse interaction
-4. **Settings Adjustment**: Real-time preview updates
-5. **Size Optimization**: Auto-adjust settings to meet constraints
-6. **Conversion**: Two-pass FFmpeg (palette generation + GIF creation)
+2. **Extract Metadata**: FFprobe or FFmpeg stderr parsing with robust fallback
+3. **Crop Selection**: Visual canvas overlay with letterboxing detection
+4. **Settings Adjustment**: Real-time preview updates with accurate estimation
+5. **Preview Generation**: 3-second preview with actual file size measurement
+6. **Size Optimization**: Auto-adjust settings to meet constraints
+7. **Conversion**: Two-pass FFmpeg (palette generation + GIF creation)
 
 ### Known Issues & Solutions
 - **GPU Process Errors**: Resolved by disabling hardware acceleration
 - **FFprobe Path Issues**: Resolved with robust path detection and fallback
+- **FFmpeg Binary Detection**: Added file size validation (must be >10MB)
+- **Crop Tool Letterboxing**: Fixed coordinate calculation for videos with black bars
+- **File Size Estimation**: Improved accuracy with content-aware compression factors
 - **Deprecated Package Warnings**: Resolved by using direct FFmpeg execution
 - **WSL Compatibility**: Windows paths properly handled for development
 

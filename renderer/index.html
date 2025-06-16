@@ -80,10 +80,12 @@
                     <div class="setting-row">
                         <label for="ditherSelect">Dither Method:</label>
                         <select id="ditherSelect">
+                            <option value="floyd_steinberg">Floyd-Steinberg (Best Quality)</option>
+                            <option value="sierra2">Sierra-2 (High Quality)</option>
+                            <option value="sierra2_4a">Sierra-2-4A (Good Quality)</option>
                             <option value="bayer:bayer_scale=5">Bayer (Balanced)</option>
-                            <option value="floyd_steinberg">Floyd-Steinberg (Smooth)</option>
-                            <option value="sierra2_4a">Sierra (Sharp)</option>
-                            <option value="none">None (Fastest)</option>
+                            <option value="bayer:bayer_scale=3">Bayer Fine (Better)</option>
+                            <option value="none">None (Smallest Size)</option>
                         </select>
                     </div>
                 </div>
@@ -115,6 +117,17 @@
                     <div class="info-row">
                         <span>Duration:</span>
                         <span id="videoDuration">-</span>
+                    </div>
+                </div>
+
+                <!-- Preview Button -->
+                <div class="preview-section">
+                    <button id="previewBtn" class="btn preview" disabled>Generate Preview</button>
+                    <div id="previewResult" style="display: none;">
+                        <img id="previewImage" style="max-width: 100%; margin: 10px 0;">
+                        <div class="preview-stats">
+                            <span>Actual Size: <strong id="actualSize">-</strong></span>
+                        </div>
                     </div>
                 </div>
 

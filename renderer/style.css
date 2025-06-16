@@ -331,6 +331,33 @@ body {
     background: linear-gradient(to bottom, #56c45a, #4caf50);
 }
 
+.btn.preview {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 8px;
+    background: linear-gradient(to bottom, #e8f0ff, #c8d8f0);
+    border-color: #6890c0;
+    color: #1e5aa0;
+}
+
+.btn.preview:hover {
+    background: linear-gradient(to bottom, #f0f6ff, #d0e0f8);
+}
+
+.preview-stats {
+    margin-top: 8px;
+    padding: 8px;
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    border-radius: 2px;
+    font-size: 11px;
+    text-align: center;
+}
+
+.preview-stats strong {
+    color: #1e7acc;
+}
+
 .btn.small {
     padding: 2px 8px;
     font-size: 10px;

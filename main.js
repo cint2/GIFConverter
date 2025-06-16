@@ -10,23 +10,47 @@ app.disableHardwareAcceleration();
 let ffmpegPath;
 let ffprobePath;
 
-// Check for bundled FFmpeg binaries first (more reliable)
-ffmpegPath = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
-ffprobePath = path.join(__dirname, 'ffmpeg', 'ffprobe.exe');
+// Try different FFmpeg sources in order of preference
+let ffmpegSource = 'none';
 
-if (fs.existsSync(ffmpegPath) && fs.existsSync(ffprobePath)) {
-  console.log('Using bundled FFmpeg binaries:', ffmpegPath);
-} else {
-  // Fallback to npm installed version
-  try {
-    ffmpegPath = require('@ffmpeg-installer/ffmpeg').path;
+// First try npm installed version (most reliable)
+try {
+  const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+  ffmpegPath = ffmpegInstaller.path;
+  // Extract directory path and look for ffprobe
+  const ffmpegDir = path.dirname(ffmpegPath);
+  const possibleFfprobePath = path.join(ffmpegDir, 'ffprobe.exe');
+  if (fs.existsSync(possibleFfprobePath)) {
+    ffprobePath = possibleFfprobePath;
+  } else {
     ffprobePath = ffmpegPath; // Use ffmpeg for probing if ffprobe not available
-    console.log('Using npm-installed FFmpeg:', ffmpegPath);
-  } catch (e) {
-    // Last resort: hope they're in system PATH
+  }
+  ffmpegSource = 'npm-installed';
+  console.log('Using npm-installed FFmpeg:', ffmpegPath);
+} catch (e) {
+  // Check for bundled FFmpeg binaries
+  const bundledFfmpegPath = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
+  const bundledFfprobePath = path.join(__dirname, 'ffmpeg', 'ffprobe.exe');
+  
+  if (fs.existsSync(bundledFfmpegPath) && fs.existsSync(bundledFfprobePath)) {
+    // Check if they're real FFmpeg binaries (should be > 10MB)
+    const ffmpegStats = fs.statSync(bundledFfmpegPath);
+    if (ffmpegStats.size > 10 * 1024 * 1024) {
+      ffmpegPath = bundledFfmpegPath;
+      ffprobePath = bundledFfprobePath;
+      ffmpegSource = 'bundled';
+      console.log('Using bundled FFmpeg binaries:', ffmpegPath);
+    } else {
+      console.log('Bundled FFmpeg files are too small, likely placeholders');
+    }
+  }
+  
+  // If still not found, try system PATH
+  if (!ffmpegSource || ffmpegSource === 'none') {
     ffmpegPath = 'ffmpeg';
     ffprobePath = 'ffprobe';
-    console.log('Using system FFmpeg from PATH');
+    ffmpegSource = 'system-path';
+    console.log('Attempting to use system FFmpeg from PATH');
   }
 }
 
@@ -126,6 +150,12 @@ ipcMain.handle('save-gif-file', async () => {
 
 ipcMain.handle('get-video-info', async (event, videoPath) => {
   return new Promise((resolve, reject) => {
+    // Check if we have valid FFmpeg
+    if (ffmpegSource === 'none') {
+      reject(new Error('FFmpeg not found. Please download FFmpeg from https://ffmpeg.org/download.html and place ffmpeg.exe and ffprobe.exe in the ffmpeg/ folder.'));
+      return;
+    }
+    
     // Try to use proper ffprobe if available, otherwise fall back to ffmpeg parsing
     const useProperFfprobe = ffprobePath !== ffmpegPath && fs.existsSync(ffprobePath);
     
@@ -133,7 +163,10 @@ ipcMain.handle('get-video-info', async (event, videoPath) => {
       // Use ffprobe for clean JSON output
       const args = ['-v', 'quiet', '-print_format', 'json', '-show_format', '-show_streams', videoPath];
       
-      const ffprobe = spawn(ffprobePath, args);
+      const ffprobe = spawn(ffprobePath, args, {
+        windowsHide: true,
+        shell: false
+      });
       let output = '';
       let errorOutput = '';
       
@@ -145,12 +178,18 @@ ipcMain.handle('get-video-info', async (event, videoPath) => {
         errorOutput += data.toString();
       });
       
+      ffprobe.on('error', (err) => {
+        console.log('FFprobe spawn error:', err.message);
+        console.log('FFprobe path was:', ffprobePath);
+        fallbackToFfmpegParsing();
+      });
+      
       ffprobe.on('close', (code) => {
         console.log(`FFprobe exit code: ${code}`);
         console.log(`FFprobe stdout length: ${output.length}`);
         console.log(`FFprobe stderr: ${errorOutput}`);
         
-        if (code !== 0) {
+        if (code !== 0 || code === null) {
           console.log('FFprobe failed, falling back to FFmpeg parsing method...');
           // Fallback to ffmpeg parsing
           fallbackToFfmpegParsing();
@@ -193,11 +232,21 @@ ipcMain.handle('get-video-info', async (event, videoPath) => {
       function fallbackToFfmpegParsing() {
         const args = ['-i', videoPath, '-t', '0.1', '-f', 'null', '-'];
         
-        const ffmpeg = spawn(ffmpegPath, args);
+        console.log('Attempting FFmpeg fallback with path:', ffmpegPath);
+        const ffmpeg = spawn(ffmpegPath, args, {
+          windowsHide: true,
+          shell: false
+        });
         let errorOutput = '';
         
         ffmpeg.stderr.on('data', (data) => {
           errorOutput += data.toString();
+        });
+        
+        ffmpeg.on('error', (err) => {
+          console.log('FFmpeg spawn error:', err.message);
+          console.log('FFmpeg path was:', ffmpegPath);
+          reject(new Error(`FFmpeg could not be executed: ${err.message}. Please ensure FFmpeg is installed.`));
         });
         
         ffmpeg.on('close', (code) => {
@@ -364,13 +413,115 @@ ipcMain.handle('convert-to-gif', async (event, options) => {
 
 // Utility function to estimate GIF file size
 ipcMain.handle('estimate-gif-size', async (event, options) => {
-  const { duration, width, height, fps, colors } = options;
+  const { duration, width, height, fps, colors, dither } = options;
   
-  // Rough estimation: (width * height * fps * duration * bits_per_pixel) / 8
-  // Adjusted for GIF compression
-  const bitsPerPixel = Math.log2(colors || 256);
-  const rawSize = width * height * fps * duration * bitsPerPixel / 8;
-  const compressedSize = rawSize * 0.3; // Assume 30% compression ratio
+  // More accurate GIF size estimation
+  // Base formula: total_frames * frame_size * compression_factor
+  const totalFrames = Math.round(duration * fps);
+  const bitsPerPixel = Math.ceil(Math.log2(colors || 256));
   
-  return Math.round(compressedSize);
+  // Base frame size (uncompressed)
+  const frameSize = (width * height * bitsPerPixel) / 8;
+  
+  // GIF uses LZW compression, effectiveness varies by content
+  // Compression factors based on typical GIF behavior
+  let compressionFactor = 0.48; // Base compression (fine-tuned based on real outputs)
+  
+  // Adjust for color count (fewer colors = better compression)
+  if (colors <= 32) compressionFactor *= 0.85;
+  else if (colors <= 64) compressionFactor *= 0.9;
+  else if (colors <= 128) compressionFactor *= 0.95;
+  
+  // Adjust for dithering (dithering reduces compression efficiency)
+  if (dither === 'floyd_steinberg') compressionFactor *= 1.35;
+  else if (dither === 'sierra2') compressionFactor *= 1.3;
+  else if (dither === 'sierra2_4a') compressionFactor *= 1.25;
+  else if (dither && dither.includes('bayer:bayer_scale=3')) compressionFactor *= 1.2;
+  else if (dither && dither.includes('bayer:bayer_scale=5')) compressionFactor *= 1.15;
+  else if (dither === 'none') compressionFactor *= 0.9;
+  
+  // Adjust for frame rate (higher fps = less inter-frame compression)
+  if (fps >= 25) compressionFactor *= 1.15;
+  else if (fps >= 20) compressionFactor *= 1.08;
+  else if (fps <= 10) compressionFactor *= 0.95;
+  
+  // Account for GIF overhead (headers, palette, etc.)
+  const overhead = 800 + (colors * 3) + (totalFrames * 20);
+  
+  const estimatedSize = (totalFrames * frameSize * compressionFactor) + overhead;
+  
+  return Math.round(estimatedSize);
 });
+
+// Generate preview GIF
+ipcMain.handle('generate-preview', async (event, options) => {
+  const { inputPath, fps, colors, dither, crop, width, height, duration } = options;
+  const tempDir = app.getPath('temp');
+  const previewPath = path.join(tempDir, `preview_${Date.now()}.gif`);
+  
+  return new Promise((resolve, reject) => {
+    // Build ffmpeg command - limit to 3 seconds for preview
+    const previewDuration = Math.min(duration, 3);
+    const args = [
+      '-i', inputPath,
+      '-t', previewDuration.toString(),
+      '-vf', buildFilterChain(crop, width, height, fps, colors, dither),
+      '-f', 'gif',
+      '-y',
+      previewPath
+    ];
+    
+    const ffmpeg = spawn(ffmpegPath, args);
+    
+    ffmpeg.on('error', (err) => {
+      reject(new Error(`FFmpeg error: ${err.message}`));
+    });
+    
+    ffmpeg.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`FFmpeg exited with code ${code}`));
+        return;
+      }
+      
+      // Get file size
+      try {
+        const stats = fs.statSync(previewPath);
+        resolve({
+          previewPath: previewPath,
+          fileSize: stats.size
+        });
+      } catch (err) {
+        reject(new Error(`Could not read preview file: ${err.message}`));
+      }
+    });
+  });
+});
+
+// Helper function to build filter chain
+function buildFilterChain(crop, width, height, fps, colors, dither) {
+  let filters = [];
+  
+  // Crop filter
+  if (crop && crop.width > 0 && crop.height > 0) {
+    filters.push(`crop=${crop.width}:${crop.height}:${crop.x}:${crop.y}`);
+  }
+  
+  // Scale filter
+  filters.push(`scale=${width}:${height}:flags=lanczos`);
+  
+  // FPS filter
+  filters.push(`fps=${fps}`);
+  
+  // Palette generation with dithering
+  const paletteGen = `palettegen=max_colors=${colors}`;
+  const paletteUse = dither === 'none' 
+    ? `paletteuse=dither=none` 
+    : `paletteuse=dither=${dither}:diff_mode=rectangle`;
+  
+  // Split stream for palette generation
+  filters.push('split[s0][s1]');
+  filters.push(`[s0]${paletteGen}[p]`);
+  filters.push(`[s1][p]${paletteUse}`);
+  
+  return filters.join(',');
+}

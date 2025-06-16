@@ -42,9 +42,12 @@ A desktop application to convert MP4/QuickTime videos to optimized GIFs with man
    ```bash
    npm install
    ```
-3. **Download FFmpeg**:
-   - Download FFmpeg from https://ffmpeg.org/download.html
-   - Extract `ffmpeg.exe` to the `ffmpeg/` folder
+3. **Download FFmpeg** (REQUIRED):
+   - Run `download-ffmpeg.bat` for instructions
+   - Or download from https://www.gyan.dev/ffmpeg/builds/
+   - Download "release essentials" build
+   - Extract `ffmpeg.exe` and `ffprobe.exe` to the `ffmpeg/` folder
+   - The real files should be 50-100MB+ in size
 4. **Start the Application**:
    ```bash
    npm start

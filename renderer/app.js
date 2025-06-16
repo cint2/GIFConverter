@@ -6,6 +6,7 @@ class GIFConverter {
         this.currentVideo = null;
         this.videoInfo = null;
         this.cropSelection = null;
+        this.videoDisplayArea = null;
         this.batchQueue = [];
         
         this.initializeElements();
@@ -43,9 +44,15 @@ class GIFConverter {
         
         // Convert controls
         this.convertBtn = document.getElementById('convertBtn');
+        this.previewBtn = document.getElementById('previewBtn');
         this.progressContainer = document.getElementById('progressContainer');
         this.progressFill = document.getElementById('progressFill');
         this.progressText = document.getElementById('progressText');
+        
+        // Preview elements
+        this.previewResult = document.getElementById('previewResult');
+        this.previewImage = document.getElementById('previewImage');
+        this.actualSize = document.getElementById('actualSize');
         
         // Crop controls
         this.cropInfo = document.getElementById('cropInfo');
@@ -94,8 +101,9 @@ class GIFConverter {
         // Other settings
         this.ditherSelect.addEventListener('change', () => this.updatePreview());
         
-        // Convert button
+        // Convert & Preview buttons
         this.convertBtn.addEventListener('click', () => this.convertToGIF());
+        this.previewBtn.addEventListener('click', () => this.generatePreview());
         
         // Crop controls
         this.clearCropBtn.addEventListener('click', () => this.clearCrop());
@@ -134,17 +142,38 @@ class GIFConverter {
             const currentX = e.offsetX;
             const currentY = e.offsetY;
             
-            const rect = this.cropOverlay.getBoundingClientRect();
-            const videoRect = this.videoPreview.getBoundingClientRect();
+            // Check if we have video display area info
+            if (!this.videoDisplayArea) {
+                console.error('Video display area not calculated');
+                return;
+            }
             
-            // Calculate crop coordinates relative to actual video
-            const scaleX = this.videoPreview.videoWidth / videoRect.width;
-            const scaleY = this.videoPreview.videoHeight / videoRect.height;
+            // Calculate positions relative to actual video display area
+            const relativeStartX = startX - this.videoDisplayArea.offsetX;
+            const relativeStartY = startY - this.videoDisplayArea.offsetY;
+            const relativeCurrentX = currentX - this.videoDisplayArea.offsetX;
+            const relativeCurrentY = currentY - this.videoDisplayArea.offsetY;
             
-            const cropX = Math.min(startX, currentX) * scaleX;
-            const cropY = Math.min(startY, currentY) * scaleY;
-            const cropWidth = Math.abs(currentX - startX) * scaleX;
-            const cropHeight = Math.abs(currentY - startY) * scaleY;
+            // Check if selection is within video bounds
+            if (relativeStartX < 0 || relativeStartY < 0 || 
+                relativeCurrentX < 0 || relativeCurrentY < 0 ||
+                relativeStartX > this.videoDisplayArea.width || 
+                relativeCurrentX > this.videoDisplayArea.width ||
+                relativeStartY > this.videoDisplayArea.height || 
+                relativeCurrentY > this.videoDisplayArea.height) {
+                console.log('Crop selection outside video bounds');
+                return;
+            }
+            
+            // Calculate scale factors
+            const scaleX = this.videoPreview.videoWidth / this.videoDisplayArea.width;
+            const scaleY = this.videoPreview.videoHeight / this.videoDisplayArea.height;
+            
+            // Calculate crop coordinates in video space
+            const cropX = Math.min(relativeStartX, relativeCurrentX) * scaleX;
+            const cropY = Math.min(relativeStartY, relativeCurrentY) * scaleY;
+            const cropWidth = Math.abs(relativeCurrentX - relativeStartX) * scaleX;
+            const cropHeight = Math.abs(relativeCurrentY - relativeStartY) * scaleY;
             
             if (cropWidth > 10 && cropHeight > 10) {
                 this.cropSelection = {
@@ -154,7 +183,11 @@ class GIFConverter {
                     height: Math.round(cropHeight)
                 };
                 
+                console.log('Crop selection set:', this.cropSelection);
                 this.updateCropInfo();
+                
+                // Auto-calculate output dimensions based on crop
+                this.calculateOutputDimensionsFromCrop();
                 this.updatePreview();
             }
         });
@@ -185,6 +218,33 @@ class GIFConverter {
         this.cropOverlay.height = rect.height;
         this.cropOverlay.style.width = rect.width + 'px';
         this.cropOverlay.style.height = rect.height + 'px';
+        
+        // Calculate actual video display area (accounting for letterboxing)
+        const videoAspect = this.videoPreview.videoWidth / this.videoPreview.videoHeight;
+        const containerAspect = rect.width / rect.height;
+        
+        let displayWidth, displayHeight, offsetX, offsetY;
+        
+        if (videoAspect > containerAspect) {
+            // Video is wider - letterbox top/bottom
+            displayWidth = rect.width;
+            displayHeight = rect.width / videoAspect;
+            offsetX = 0;
+            offsetY = (rect.height - displayHeight) / 2;
+        } else {
+            // Video is taller - letterbox left/right
+            displayHeight = rect.height;
+            displayWidth = rect.height * videoAspect;
+            offsetX = (rect.width - displayWidth) / 2;
+            offsetY = 0;
+        }
+        
+        this.videoDisplayArea = {
+            width: displayWidth,
+            height: displayHeight,
+            offsetX: offsetX,
+            offsetY: offsetY
+        };
     }
 
     updateCropInfo() {
@@ -200,7 +260,48 @@ class GIFConverter {
         const ctx = this.cropOverlay.getContext('2d');
         ctx.clearRect(0, 0, this.cropOverlay.width, this.cropOverlay.height);
         this.updateCropInfo();
+        
+        // Reset to default dimensions
+        if (this.videoInfo) {
+            this.adjustDimensions();
+        }
         this.updatePreview();
+    }
+    
+    calculateOutputDimensionsFromCrop() {
+        if (!this.cropSelection) return;
+        
+        const cropAspectRatio = this.cropSelection.width / this.cropSelection.height;
+        const maxHeight = 80;
+        const maxWidth = 250;
+        
+        let outputWidth, outputHeight;
+        
+        // If crop height is less than or equal to maxHeight
+        if (this.cropSelection.height <= maxHeight) {
+            outputHeight = this.cropSelection.height;
+            outputWidth = Math.round(outputHeight * cropAspectRatio);
+        } else {
+            // Scale down to fit maxHeight
+            outputHeight = maxHeight;
+            outputWidth = Math.round(outputHeight * cropAspectRatio);
+            
+            // Check if width exceeds maxWidth
+            if (outputWidth > maxWidth) {
+                outputWidth = maxWidth;
+                outputHeight = Math.round(outputWidth / cropAspectRatio);
+            }
+        }
+        
+        // Update the dimension inputs
+        this.outputWidth.value = outputWidth;
+        this.outputHeight.value = outputHeight;
+        
+        // Disable maintain aspect ratio when crop is active
+        this.maintainAspect.checked = false;
+        
+        console.log(`Crop dimensions: ${this.cropSelection.width}x${this.cropSelection.height}`);
+        console.log(`Output dimensions: ${outputWidth}x${outputHeight}`);
     }
 
     async selectSingleFile() {
@@ -259,13 +360,25 @@ class GIFConverter {
             
             this.updateVideoInfo();
             this.convertBtn.disabled = false;
+            this.previewBtn.disabled = false;
             
             // Auto-adjust dimensions based on constraints
             this.adjustDimensions();
             
         } catch (error) {
             console.error('Error loading video:', error);
-            alert('Error loading video file. Please check the file format.');
+            
+            // Check if it's an FFmpeg-related error
+            if (error.message && error.message.includes('FFmpeg')) {
+                alert('FFmpeg Error:\n\n' + error.message + '\n\nPlease run download-ffmpeg.bat for instructions on installing FFmpeg.');
+            } else {
+                alert('Error loading video file:\n' + error.message);
+            }
+            
+            // Reset UI
+            this.dropZone.style.display = 'block';
+            this.videoContainer.style.display = 'none';
+            this.convertBtn.disabled = true;
         }
     }
 
@@ -303,6 +416,9 @@ class GIFConverter {
     adjustDimensions() {
         if (!this.videoInfo) return;
         
+        // Don't auto-adjust if crop is active
+        if (this.cropSelection) return;
+        
         const { width, height } = this.videoInfo;
         const maxWidth = 250;
         const maxHeight = 80;
@@ -332,7 +448,13 @@ class GIFConverter {
             return;
         }
         
-        const aspectRatio = this.videoInfo.width / this.videoInfo.height;
+        // Use crop aspect ratio if crop is active, otherwise use video aspect ratio
+        let aspectRatio;
+        if (this.cropSelection) {
+            aspectRatio = this.cropSelection.width / this.cropSelection.height;
+        } else {
+            aspectRatio = this.videoInfo.width / this.videoInfo.height;
+        }
         
         if (changedDimension === 'width') {
             const newWidth = parseInt(this.outputWidth.value);
@@ -365,8 +487,9 @@ class GIFConverter {
 
     async estimateFileSize(width, height, fps, colors, duration) {
         try {
+            const dither = this.ditherSelect.value;
             const estimatedBytes = await ipcRenderer.invoke('estimate-gif-size', {
-                width, height, fps, colors, duration
+                width, height, fps, colors, duration, dither
             });
             
             const estimatedMB = estimatedBytes / (1024 * 1024);
@@ -460,6 +583,48 @@ class GIFConverter {
             const roundedPercent = Math.round(percent);
             this.progressFill.style.width = `${roundedPercent}%`;
             this.progressText.textContent = `${roundedPercent}%`;
+        }
+    }
+    
+    async generatePreview() {
+        if (!this.currentVideo) return;
+        
+        try {
+            this.previewBtn.disabled = true;
+            this.previewBtn.textContent = 'Generating Preview...';
+            
+            const options = {
+                inputPath: this.currentVideo,
+                fps: parseInt(this.fpsSlider.value),
+                colors: parseInt(this.colorsSlider.value),
+                dither: this.ditherSelect.value,
+                crop: this.cropSelection,
+                width: parseInt(this.outputWidth.value),
+                height: parseInt(this.outputHeight.value),
+                duration: this.videoInfo.duration,
+                isPreview: true
+            };
+            
+            const { previewPath, fileSize } = await ipcRenderer.invoke('generate-preview', options);
+            
+            // Display preview
+            this.previewImage.src = `file://${previewPath}`;
+            this.actualSize.textContent = `${(fileSize / (1024 * 1024)).toFixed(2)} MB`;
+            this.previewResult.style.display = 'block';
+            
+            // Update estimated size display with actual size comparison
+            const estimatedMB = parseFloat(this.estimatedSize.textContent);
+            const actualMB = fileSize / (1024 * 1024);
+            const accuracy = Math.round((estimatedMB / actualMB) * 100);
+            
+            this.estimatedSize.innerHTML = `${estimatedMB.toFixed(2)} MB <small>(${accuracy}% accurate)</small>`;
+            
+        } catch (error) {
+            console.error('Error generating preview:', error);
+            alert('Error generating preview: ' + error.message);
+        } finally {
+            this.previewBtn.disabled = false;
+            this.previewBtn.textContent = 'Generate Preview';
         }
     }
 }
